@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>Pong Programming Exercise</title>
+		<meta charset="UTF-8">
+		<meta name="description" content="Pong Programming Exercise">
+		<meta name="author" content="Dranyth">
+		<style>
+			body {
+				background-color: midnightblue;
+			}
+			
+			#gamecontainer {
+				display:block;
+				width:800px;
+				padding: 30px;
+				background-color: black;
+				border-radius: 30px;
+				margin: auto;
+			}
+			#gameArea {
+				border-top: 2px white solid;
+				border-bottom: 2px white solid;
+				cursor: ns-resize;
+			}
+		</style>
+		<script>
+			var canvas;
+			var canvasContext;
+			var ballX = 400;
+			var ballY = 300;
+			var ballVelX = Math.floor(Math.random()*3+3);
+			var ballVelY = Math.floor(Math.random()*10-5);
+			var ballRadius = 10;
+			var paddle1Y = paddle2Y = 250;
+			var p1Score = p2Score = 0;
+			var p2MovementRate = 6;
+			var p2WaitPos=300;
+			var showGameStart = true;
+			var drawColor = 'white';
+			var particleList = [];
+			
+			const PADDLE_HEIGHT = 100;
+			const PADDLE_WIDTH = 15;
+			const BALL_MAX_SPEED = 20;
+			const WINNING_SCORE = 3;
+			const COLORS = [
+				'#FF3300',
+				'#FF6600',
+				'#F2EA02',
+				'#33FF00',
+				'#00FFFF',
+				'#0033FF',
+				'#FF00FF',
+				'#FF0099',
+				'#9D00FF'
+			];
+			
+			function particleClass() {
+				this.x;
+				this.y;
+				this.velX;
+				this.velY;
+				this.color;
+				this.lifetime;
+				this.done = false;
+				
+				this.move = function() {
+					this.x += this.velX;
+					this.y += this.velY;
+					
+					/*if(this.x < 0) {
+						this.velX *= -1;
+					}
+					if(this.x > canvas.width) {
+						this.velX *= -1;
+					}
+					if(this.y < 0) {
+						this.velY *= -1;
+					}
+					if(this.y > canvas.height) {
+						this.velY *= -1;
+					}*/
+					
+					this.lifetime--;
+					if(this.lifetime <= 0) {
+						this.done = true;
+					}
+				}
+				
+				this.draw = function() {
+					canvasContext.shadowBlur = 20;
+					canvasContext.shadowOffsetX = 0;
+					canvasContext.shadowOffsetY = 0;
+					canvasContext.shadowColor = this.color;
+					colorRect(this.x,this.y,2,2,this.color);
+				}
+			} // End of particleClass def
+			
+			function calculateMousePos(evt) {
+				var rect = canvas.getBoundingClientRect();
+				var root = document.documentElement;
+				var mouseX = evt.clientX - rect.left - root.scrollLeft;
+				var mouseY = evt.clientY - rect.top - root.scrollTop;
+				return {
+					x:mouseX,
+					y:mouseY
+				};
+			}
+			
+			function clamp(num, min, max) {
+				return Math.min(max, Math.max(min, num));
+			}
+			
+			function handleMouseClick(evt) {
+				if(showGameStart) {
+					p1Score = p2Score = 0;
+					showGameStart = false;
+					ballReset();
+				}
+			}
+			
+			window.onload = function() {
+				canvas = document.getElementById("gameArea");
+				canvasContext = canvas.getContext("2d");
+				
+				//var framesPerSecond = 30;
+				//setInterval(gameUpdate, 1000/framesPerSecond);
+				requestAnimationFrame(gameUpdate);
+				
+				canvas.addEventListener("mousedown",handleMouseClick);
+				
+				canvas.addEventListener("mousemove", 
+					function(evt) {
+						var mousePos = calculateMousePos(evt);
+						if(mousePos.y <= PADDLE_HEIGHT/2) {
+							paddle1Y = 0;
+						} else if(mousePos.y >= canvas.height-PADDLE_HEIGHT/2) {
+							paddle1Y = canvas.height-PADDLE_HEIGHT;
+						} else {
+							paddle1Y = mousePos.y-PADDLE_HEIGHT/2;
+						}
+					});
+			}
+			
+			function gameUpdate() {
+				moveAll();
+				drawAll();
+				requestAnimationFrame(gameUpdate);
+			}
+			
+			function ballReset() {
+				if(p1Score >= WINNING_SCORE || p2Score >= WINNING_SCORE) {
+					showGameStart = true;
+					particleList = [];
+				}
+				var startingVelX = Math.floor(Math.random()*3+3);
+				var velMult=0;
+				if(ballVelX > 0) {
+					velMult += 1;
+				} else {
+					velMult -= 1;
+				}
+				ballVelX = startingVelX * velMult;
+				ballVelY = Math.floor(Math.random()*10-5);
+				p2MovementRate = 6;
+				ballX = canvas.width/2;
+				ballY = canvas.height/2;
+			}
+			
+			function computerMovement() {
+				if(ballVelX > 0) {
+					if(paddle2Y+Math.floor(PADDLE_HEIGHT/2) < ballY-35) {
+						paddle2Y = clamp(paddle2Y + p2MovementRate,0,canvas.height-PADDLE_HEIGHT);
+					} else if(paddle2Y+Math.floor(PADDLE_HEIGHT/2) > ballY+35) {
+						paddle2Y = clamp(paddle2Y - p2MovementRate,0,canvas.height-PADDLE_HEIGHT);
+					}
+				} else {
+					if(paddle2Y+Math.floor(PADDLE_HEIGHT/2) < p2WaitPos-p2MovementRate) {
+						paddle2Y = clamp(paddle2Y + p2MovementRate,0,canvas.height-PADDLE_HEIGHT);
+					} else if(paddle2Y+Math.floor(PADDLE_HEIGHT/2) > p2WaitPos+p2MovementRate) {
+						paddle2Y = clamp(paddle2Y - p2MovementRate,0,canvas.height-PADDLE_HEIGHT);
+					}
+					
+				}
+			}
+			
+			function p1Hit(x,y,dir) {
+				ballX = x;
+				ballVelX = -ballVelX;
+				if(ballVelX >= BALL_MAX_SPEED) {
+					ballVelX = BALL_MAX_SPEED;
+				} else {
+					ballVelX++;
+				}
+				ballVelY = 0.35 * (ballY - (paddle1Y+Math.floor(PADDLE_HEIGHT/2)));
+				changeColor();
+				particleBurst(x,y,50,dir);
+			}
+			
+			function p2Hit(x,y,dir) {
+				p2WaitPos=canvas.height/2+(Math.random()*100-50)
+				ballX = x;
+				if(ballVelX >= BALL_MAX_SPEED) {
+					ballVelX = BALL_MAX_SPEED;
+				} else {
+					ballVelX++;
+				}
+				ballVelX = -ballVelX;
+				ballVelY = 0.35 * (ballY - (paddle2Y+Math.floor(PADDLE_HEIGHT/2)));
+				changeColor();
+				particleBurst(x,y,50,dir);
+			}
+			
+			function wallHit(x,y,dir) {
+				ballY = y;
+				ballVelY *= -1;
+				changeColor();
+				particleBurst(x,y,50,dir);
+			}
+			
+			function collisionCheck(dir) {
+				switch(dir) {
+					case "LEFT":
+						if(collideTest(ballX-ballRadius,ballY, dir, paddle1Y,paddle1Y+PADDLE_HEIGHT,PADDLE_WIDTH)) {
+							p1Hit(ballX-ballRadius,ballY, dir);
+							
+							return;
+						}
+						if(collideTest(ballX-Math.floor(ballRadius/2),ballY-Math.floor(ballRadius/2), dir, paddle1Y,paddle1Y+PADDLE_HEIGHT,PADDLE_WIDTH)) {
+							p1Hit(ballX-Math.floor(ballRadius/2),ballY-Math.floor(ballRadius/2), dir);
+							
+							return;
+						}
+						if(collideTest(ballX-Math.floor(ballRadius/2),ballY+Math.floor(ballRadius/2), dir, paddle1Y,paddle1Y+PADDLE_HEIGHT,PADDLE_WIDTH)) {
+							p1Hit(ballX-Math.floor(ballRadius/2),ballY+Math.floor(ballRadius/2), dir);
+							
+							return;
+						}
+						if(collideTest(ballX,ballY-ballRadius, dir, paddle1Y,paddle1Y+PADDLE_HEIGHT, PADDLE_WIDTH)) {
+							p1Hit(ballX,ballY-ballRadius, dir);
+							
+							return;
+						}
+						if(collideTest(ballX,ballY+ballRadius, dir, paddle1Y,paddle1Y+PADDLE_HEIGHT, PADDLE_WIDTH)) {
+							p1Hit(ballX,ballY+ballRadius, dir);
+							
+							return;
+						}
+						if(collideTest(ballX-ballRadius,ballY, dir, 0,canvas.height, 0)) {
+							p2Score++;
+							changeColor();
+							ballReset();
+							
+							return;
+						}
+					break;
+					case "RIGHT":
+						if(collideTest(ballX-ballRadius,ballY, dir, paddle2Y,paddle2Y+PADDLE_HEIGHT,canvas.width-PADDLE_WIDTH)) {
+							p2Hit(ballX-ballRadius,ballY, dir);
+							
+							return;
+						}
+						if(collideTest(ballX+Math.floor(ballRadius/2),ballY-Math.floor(ballRadius/2), dir, paddle2Y,paddle2Y+PADDLE_HEIGHT,canvas.width-PADDLE_WIDTH)) {
+							p2Hit(ballX+Math.floor(ballRadius/2),ballY-Math.floor(ballRadius/2), dir);
+							
+							return;
+						}
+						if(collideTest(ballX+Math.floor(ballRadius/2),ballY+Math.floor(ballRadius/2), dir, paddle2Y,paddle2Y+PADDLE_HEIGHT,canvas.width-PADDLE_WIDTH)) {
+							p2Hit(ballX+Math.floor(ballRadius/2),ballY+Math.floor(ballRadius/2), dir);
+							
+							return;
+						}
+						if(collideTest(ballX,ballY-ballRadius, dir, paddle2Y,paddle2Y+PADDLE_HEIGHT,canvas.width-PADDLE_WIDTH)) {
+							p2Hit(ballX,ballY-ballRadius, dir);
+							
+							return;
+						}
+						if(collideTest(ballX,ballY+ballRadius, dir, paddle2Y,paddle2Y+PADDLE_HEIGHT,canvas.width-PADDLE_WIDTH)) {
+							p2Hit(ballX,ballY+ballRadius, dir);
+							
+							return;
+						}
+						if(collideTest(ballX+ballRadius,ballY, dir, 0,canvas.height, canvas.width)) {
+							p1Score++;
+							changeColor();
+							ballReset();
+							
+							return;
+						}
+					break;
+					case "TOP":
+						if(collideTest(ballX,ballY-ballRadius, dir, 0, canvas.width, 0)) {
+							wallHit(ballX,ballY-ballRadius,dir);
+							
+							return;
+						}
+					break;
+					case "BOTTOM":
+						if(collideTest(ballX,ballY+ballRadius, dir, 0, canvas.width, canvas.height)) {
+							wallHit(ballX,ballY+ballRadius,dir);
+							
+							return;
+						}
+					break;
+					default:
+						return;
+				}
+				return;
+			}
+			
+			function collideTest(checkX,checkY, dir, lowRange,highRange,plane) {
+					switch(dir) {
+						case "TOP":
+							if(checkX>lowRange && checkX<highRange && checkY<plane) {
+								return true;
+							}
+						break;
+						case "RIGHT":
+							if(checkY>lowRange && checkY<highRange && checkX>plane) {
+								return true;
+							}
+						break;
+						case "BOTTOM":
+							if(checkX>lowRange && checkX<highRange && checkY>plane) {
+								return true;
+							}
+						break;
+						case "LEFT":
+							if(checkY>lowRange && checkY<highRange && checkX<plane) {
+								return true;
+							}
+						break;
+						default:
+							return false;
+					}
+					return false;
+			}
+			
+			function moveAll() {
+				if(showGameStart) {
+					return;
+				}
+				ballX = ballX + ballVelX;
+				ballY = ballY + ballVelY;
+				computerMovement();
+				
+				if(ballX-Math.floor(ballRadius/2)+ballVelX<=PADDLE_WIDTH && ballVelX < 0) {
+					collisionCheck("LEFT");
+				}
+				if(ballX+Math.floor(ballRadius/2)+ballVelX>=canvas.width-PADDLE_WIDTH && ballVelX > 0) {
+					collisionCheck("RIGHT");
+				}
+				if(ballY-Math.floor(ballRadius/2)+ballVelY<=0 && ballVelY < 0) {
+					collisionCheck("TOP");
+				}
+				if(ballY+Math.floor(ballRadius/2)+ballVelY>=canvas.height && ballVelY > 0) {
+					collisionCheck("BOTTOM");
+				}
+				
+				// Handling of particles' movement
+				if(particleList.length > 0) {
+					for( var i = 0; i < particleList.length; i++) {
+						particleList[i].move();
+					}
+				}
+				removeParticle();
+			}
+			
+			function particleBurst(x,y,num,dir) {
+				for(var i=0; i < num; i++) {
+					addParticle(x,y,dir);
+				}
+			}
+			
+			function addParticle(x,y,dir) {
+				var tempPart;
+				
+				tempPart = new particleClass();
+				tempPart.x = x;
+				tempPart.y = y;
+				if(dir=="LEFT") {
+					tempPart.velX = Math.floor(Math.random()*9+1);
+				} else if(dir=="RIGHT") {
+					tempPart.velX = -(Math.floor(Math.random()*9+1));
+				} else {
+					tempPart.velX = Math.floor(Math.random()*20-10);
+				}
+				if(dir=="TOP") {
+					tempPart.velY = Math.floor(Math.random()*9+1);
+				} else if(dir=="BOTTOM") {
+					tempPart.velY = -(Math.floor(Math.random()*9+1));
+				} else {
+					tempPart.velY = Math.floor(Math.random()*20-10);
+				}
+				tempPart.color = drawColor;
+				tempPart.lifetime = Math.floor(Math.random()*10 + 5);
+				
+				particleList.push(tempPart);
+			}
+			
+			function removeParticle() {
+				if(particleList.length > 0) {
+					for(var i = particleList.length-1; i >= 0; --i) {
+						if(particleList[i].done) {
+							particleList.splice(i,1);
+						}
+					}
+				}
+			}
+			
+			function changeColor() {
+				// Chooses a random color to draw the game elements with
+				drawColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+				document.getElementById("gameArea").style.borderColor = drawColor;
+			}
+			
+			function drawAll() {
+				// First clears the screen for the next draw frame
+				colorRect(0,0,canvas.width,canvas.height,"#000");
+				// Using Shadow for a neon glow
+				canvasContext.shadowBlur = 20;
+				canvasContext.shadowOffsetX = 0;
+				canvasContext.shadowOffsetY = 0;
+				canvasContext.shadowColor = drawColor;
+				// Draws the invisible top/bottom border lines for the shadow to be applied
+				colorRect(0,-5,canvas.width,5,drawColor);
+				colorRect(0,canvas.height,canvas.width,5,drawColor);
+				// Draws the left player paddle
+				colorRect(0,paddle1Y,PADDLE_WIDTH,PADDLE_HEIGHT,drawColor);
+				// Draws the right player paddle
+				colorRect(canvas.width-PADDLE_WIDTH,paddle2Y,PADDLE_WIDTH,PADDLE_HEIGHT,drawColor);
+				// Draws the Net
+				colorNet(drawColor);
+				// Draws the ball
+				colorCircle(ballX,ballY, ballRadius, drawColor);
+				// Set a larger font size/face for the Score
+				canvasContext.font = "30px Verdana";
+				canvasContext.textAlign = "center";
+				// Draws the Score
+				colorScore(drawColor);
+				if(showGameStart) {
+					canvasContext.fillStyle = drawColor;
+					canvasContext.font = "bold 20px Verdana";
+					if(p1Score == WINNING_SCORE) {
+						canvasContext.fillText("You Win!", canvas.width/4, canvas.height/4);
+					}
+					if(p2Score == WINNING_SCORE) {
+						canvasContext.fillText("CPU Wins!", canvas.width*0.75, canvas.height/4);
+					}
+					canvasContext.font = "bold 15px Verdana";
+					canvasContext.fillText("Click to Start", canvas.width/2, canvas.height/2-54);
+					return;
+				}
+				if(particleList.length > 0) {
+					for( var i = 0; i < particleList.length; i++) {
+						particleList[i].draw();
+					}
+				}
+			}
+			
+			function colorRect(leftX,topY, width,height, drawColor) {
+				canvasContext.fillStyle = drawColor;
+				canvasContext.fillRect(leftX,topY, width,height);
+			}
+			
+			function colorCircle(centerX,centerY, radius, drawColor) {
+				canvasContext.fillStyle = drawColor;
+				canvasContext.beginPath();
+				canvasContext.arc(centerX,centerY, radius, 0, Math.PI*2, true);
+				canvasContext.fill();
+			}
+			
+			function colorScore(drawColor) {
+				canvasContext.fillStyle = drawColor;
+				canvasContext.fillText(p1Score, canvas.width/2-20, 30);
+				canvasContext.fillText(p2Score, canvas.width/2+20, 30);
+			}
+			
+			function colorNet(drawColor) {
+				for(i=0;i<canvas.height;i+=40) {
+					colorRect(canvas.width/2-1,i+10,2,20,drawColor);
+				}
+				
+			}
+		</script>
+	</head>
+	
+	<body>
+		<div id="gamecontainer"><canvas id="gameArea" width="800" height="600"></canvas></div>
+	</body>
+</html>
